@@ -1,9 +1,10 @@
 import { Form } from "react-bootstrap";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Table from "react-bootstrap/Table";
 import JSConfetti from "js-confetti";
 import styled from "styled-components";
 import img from "./assets/bg.png";
+import { useDebouncedValue } from "./useDebouncedValue";
 
 const Wrapper = styled.section`
   background-image: url(${img});
@@ -45,7 +46,7 @@ const TableDiv = styled.div`
   padding-right: 100px;
 `;
 
-let nextId = 0;
+let nextId = 1;
 export const ShoppingList = () => {
   const jsConfetti = new JSConfetti();
   // Shops
@@ -54,8 +55,8 @@ export const ShoppingList = () => {
     { id: 2, name: "Teknosa" },
     { id: 3, name: "BIM" },
   ];
-  const [shop, setShop] = useState("");
-  const handleChangeShop = (e) => setShop(e.target.value);
+  const [shopId, setShopId] = useState("");
+  const handleChangeShop = (e) => setShopId(e.target.value);
 
   // Categories
   const categories = [
@@ -65,30 +66,95 @@ export const ShoppingList = () => {
     { id: 4, name: "Groceries" },
     { id: 5, name: "Bakery" },
   ];
-  const [categorie, setCategorie] = useState("");
-  const handleChangeCategorie = (e) => setCategorie(e.target.value);
+  const [categoryId, setCategoryId] = useState("");
+  const handleChangeCategorie = (e) => setCategoryId(e.target.value);
 
   //Products
-
   const [productInput, setProductInput] = useState("");
-
   const [products, setProducts] = useState([]);
 
-  const completeTheProduct = (index) => {
-    const newProducts = [...products];
-    newProducts[index].completed = !newProducts[index].completed;
+  //Filters
+  const [filteredShopId, setFilteredShopId] = useState("");
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [filteredCategoryId, setFilteredCategoryId] = useState("");
+  const [filteredStatus, setFilteredStatus] = useState("");
+  const [filteredName, setFilteredName] = useState("");
+  const debouncedQuery = useDebouncedValue(filteredName, 400);
 
-    if (newProducts.every((item) => item.completed)) {
+  const getShopName = (shopId) => {
+    const foundShop = shops.find((shop) => shop.id === shopId);
+    return foundShop ? foundShop.name : "Unknown Shop";
+  };
+  const getCategoryName = (categoryId) => {
+    const foundCategory = categories.find(
+      (category) => category.id === categoryId
+    );
+    return foundCategory ? foundCategory.name : "Unknown Shop";
+  };
+
+  useEffect(() => {
+    // Filter products based on sh
+
+    let result = products.filter((item) => {
+      const shopFilter = !filteredShopId || item.shop.includes(filteredShopId);
+      const categoryFilter =
+        !filteredCategoryId || item.categorie.includes(filteredCategoryId);
+
+      const statusFilter =
+        filteredStatus === "all" ||
+        !filteredStatus ||
+        (filteredStatus === "bought" && item.completed) ||
+        (filteredStatus === "notBought" && !item.completed);
+
+      const nameFilter = item.name
+        .toLowerCase()
+        .includes(debouncedQuery.toLowerCase());
+
+      // Combine all filters
+      return shopFilter && categoryFilter && statusFilter && nameFilter;
+    });
+
+    // Set filteredProducts state with the filtered results
+    setFilteredProducts(result);
+  }, [
+    filteredShopId,
+    filteredCategoryId,
+    filteredStatus,
+    filteredName,
+    products,
+    debouncedQuery,
+  ]);
+
+  const completeTheProduct = (id) => {
+    const updatedProducts = products.map((product) => {
+      if (product.id === id) {
+        return {
+          ...product,
+          completed: !product.completed,
+        };
+      }
+      return product;
+    });
+
+    if (updatedProducts.every((item) => item.completed)) {
       jsConfetti.addConfetti();
     }
 
-    setProducts(newProducts);
+    setProducts(updatedProducts);
   };
 
   const removeProduct = (value) => {
     setProducts((oldValues) =>
       oldValues.filter((product) => product.id !== value.id)
     );
+  };
+
+  const clearFilters = () => {
+    setFilteredShopId("");
+    setFilteredProducts([]);
+    setFilteredCategoryId("");
+    setFilteredStatus("");
+    setFilteredName("");
   };
 
   // Handle submit
@@ -99,17 +165,18 @@ export const ShoppingList = () => {
       const newProduct = {
         id: nextId++,
         name: productInput,
-        shop: shop,
-        categorie: categorie,
-        completed: false, // Initialize completed to false
+        shop: shopId,
+        categorie: categoryId,
+        completed: false,
       };
 
       setProducts([...products, newProduct]);
       setProductInput("");
-      setShop("");
-      setCategorie("");
+      setShopId("");
+      setCategoryId("");
     }
   };
+
   return (
     <Wrapper>
       <StyledDiv>
@@ -128,7 +195,7 @@ export const ShoppingList = () => {
 
             <Form.Select
               className="mb-3"
-              value={shop}
+              value={shopId}
               onChange={handleChangeShop}
             >
               <option value="" disabled>
@@ -136,20 +203,20 @@ export const ShoppingList = () => {
               </option>
               {shops.map((item) => {
                 return (
-                  <option key={item.id} value={item.name}>
+                  <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
                 );
               })}
             </Form.Select>
 
-            <Form.Select value={categorie} onChange={handleChangeCategorie}>
+            <Form.Select value={categoryId} onChange={handleChangeCategorie}>
               <option value="" disabled>
                 Select a category
               </option>
               {categories.map((item) => {
                 return (
-                  <option key={item.id} value={item.name}>
+                  <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
                 );
@@ -166,6 +233,93 @@ export const ShoppingList = () => {
             </StyledButton>
           </Form>
         </FormDiv>
+        <FormDiv className="mb-3">
+          <FormDiv className="mx-2">
+            <Form.Select
+              value={filteredShopId}
+              onChange={(e) => setFilteredShopId(e.target.value)}
+            >
+              <option value="" disabled>
+                Shop
+              </option>
+              {shops.map((item) => {
+                return (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                );
+              })}
+            </Form.Select>
+          </FormDiv>
+          <FormDiv className="mx-2">
+            <Form.Select
+              value={filteredCategoryId}
+              onChange={(e) => setFilteredCategoryId(e.target.value)}
+            >
+              <option value="" disabled>
+                Select a category
+              </option>
+              {categories.map((item) => {
+                return (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                );
+              })}
+            </Form.Select>
+          </FormDiv>
+          <FormDiv className="mx-2">
+            <input
+              type="text"
+              name="name"
+              className="ms-2 py-2 rounded"
+              value={filteredName}
+              onChange={(e) => setFilteredName(e.target.value)}
+              aria-label="Product"
+            />
+          </FormDiv>
+        </FormDiv>
+        <FormDiv className="mb-3">
+          <Form.Check
+            aria-label="all"
+            type="radio"
+            label="All"
+            name="radAnswer"
+            value="all"
+            checked={filteredStatus === "all"}
+            onChange={(e) => setFilteredStatus(e.target.value)}
+            className="mx-2"
+          />
+          <Form.Check
+            aria-label="bought"
+            type="radio"
+            label="Bought"
+            name="radAnswer"
+            value="bought"
+            checked={filteredStatus === "bought"}
+            onChange={(e) => setFilteredStatus(e.target.value)}
+            className="mx-2"
+          />
+          <Form.Check
+            aria-label="not bought"
+            type="radio"
+            label="Not Bought"
+            name="radAnswer"
+            value="notBought"
+            checked={filteredStatus === "notBought"}
+            onChange={(e) => setFilteredStatus(e.target.value)}
+            className="mx-2"
+          />
+        </FormDiv>
+        <FormDiv className="mb-3">
+          <StyledButton
+            className="mx-2"
+            variant="secondary"
+            onClick={clearFilters}
+          >
+            Clear Filters
+          </StyledButton>
+        </FormDiv>
 
         <TableDiv>
           <Table striped bordered hover variant="light">
@@ -179,15 +333,15 @@ export const ShoppingList = () => {
               </tr>
             </thead>
             <tbody>
-              {products.map((product, index) => (
-                <tr key={index}>
+              {filteredProducts.map((product) => (
+                <tr key={product.id}>
                   <td>
                     <button
                       type="button"
                       className={`btn btn-success ${
                         product.completed ? product.completed : ""
                       }`}
-                      onClick={() => completeTheProduct(index)}
+                      onClick={() => completeTheProduct(product.id)}
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -211,16 +365,18 @@ export const ShoppingList = () => {
                   </td>
                   <td>
                     {product.completed ? (
-                      <del>{product.shop}</del>
+                      <del>{getShopName(parseInt(product.shop, 10))}</del>
                     ) : (
-                      product.shop
+                      getShopName(parseInt(product.shop, 10))
                     )}
                   </td>
                   <td>
                     {product.completed ? (
-                      <del>{product.categorie}</del>
+                      <del>
+                        {getCategoryName(parseInt(product.categorie, 10))}
+                      </del>
                     ) : (
-                      product.categorie
+                      getCategoryName(parseInt(product.categorie, 10))
                     )}
                   </td>
                   <td>
